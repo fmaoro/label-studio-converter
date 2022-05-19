@@ -84,6 +84,64 @@ def create_tokens_and_tags(text, spans):
     return tokens, tags
 
 
+def create_tokens_tags_indices(text, spans):
+    #tokens_and_idx = tokenize(text) # This function doesn't work properly if text contains multiple whitespaces...
+    token_index_tuples = [token for token in WhitespaceTokenizer().span_tokenize(text)]
+    tokens_and_idx = [(text[start:end], start) for start, end in token_index_tuples]
+    indexed_spans = []
+    if spans and all([span.get('start') is not None and span.get('end') is not None for span in spans]):
+        spans = list(sorted(spans, key=itemgetter('start')))
+        span = spans.pop(0)
+
+        indexed_span = span
+        indexed_span["token_start"] = 0 # Index des ersten Tokens
+
+        span_start = span['start']
+        span_end = span['end']-1
+        prefix = 'B-'
+        tokens, tags = [], []
+        for index, (token, token_start) in enumerate(tokens_and_idx):
+            tokens.append(token)
+            token_end = token_start + len(token) #"- 1" - This substraction is wrong. token already uses the index E.g. "Hello" is 0-4
+            token_start_ind = token_start  #It seems like the token start is too early.. for whichever reason
+
+            #if for some reason end of span is missed.. pop the new span (Which is quite probable due to this method)
+            #Attention it seems like span['end'] is the index of first char afterwards. In case the whitespace is part of the
+            #labell we need to subtract one. Otherwise next token won't trigger the span update.. only the token after next..
+            if token_start_ind > span_end:
+                while spans:
+                    indexed_spans.append(indexed_span)
+                    span = spans.pop(0)
+                    span_start = span['start']
+                    span_end = span['end'] - 1
+                    prefix = 'B-'
+
+                    indexed_span = span
+                    if token_start <= span_end:                       
+                        break
+            # Add tag "O" for spans that:
+            # - are empty
+            # - span start has passed over token_end
+            # - do not have any label (None or empty list)
+            if not span or token_end < span_start or not span.get('labels'):
+                tags.append('O')
+            elif span_start <= token_end and span_end >= token_start_ind:
+                if prefix == "B-":
+                    indexed_span["token_start"] = index # Index des ersten Tokens
+                tags.append(prefix + span['labels'][0])
+                prefix = 'I-'
+                indexed_span["token_end"] = index
+            else:
+                tags.append('O')
+        indexed_spans.append(indexed_span)
+        
+    else:
+        tokens = [token for token, _ in tokens_and_idx]
+        tags = ['O'] * len(tokens)
+
+    return tokens, tags, indexed_spans
+
+
 def _get_upload_dir(project_dir=None, upload_dir=None):
     """Return either upload_dir, or path by LS_UPLOAD_DIR, or project_dir/upload"""
     if upload_dir:

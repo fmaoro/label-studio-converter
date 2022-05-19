@@ -304,11 +304,14 @@ class Converter(object):
                 if 'from_name' in r and r['from_name'] in self._output_tags:
                     v = deepcopy(r['value'])
                     v['type'] = self._schema[r['from_name']]['type']
+                    v["id"] = r["id"]
                     if 'original_width' in r:
                         v['original_width'] = r['original_width']
                     if 'original_height' in r:
                         v['original_height'] = r['original_height']
                     outputs[r['from_name']].append(v)
+                if "type" in r and r["type"] == "relation":
+                    outputs["relations"].append(deepcopy(r))
 
             data = Converter.get_data(task, outputs, annotation)
             if 'agreement' in task:
